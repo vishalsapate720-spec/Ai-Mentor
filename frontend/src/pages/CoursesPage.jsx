@@ -130,8 +130,8 @@ const CoursesPage = () => {
               <button
                 onClick={() => setActiveTab("my-courses")}
                 className={`px-6 py-2 rounded-lg font-semibold ${activeTab === "my-courses"
-                    ? "bg-[#2DD4BF] text-white shadow"
-                    : "text-muted"
+                  ? "bg-[#2DD4BF] text-white shadow"
+                  : "text-muted"
                   }`}
               >
                 My Courses
@@ -139,8 +139,8 @@ const CoursesPage = () => {
               <button
                 onClick={() => setActiveTab("explore")}
                 className={`px-6 py-2 rounded-lg font-semibold ${activeTab === "explore"
-                    ? "bg-[#2DD4BF] text-white shadow"
-                    : "text-muted"
+                  ? "bg-[#2DD4BF] text-white shadow"
+                  : "text-muted"
                   }`}
               >
                 Explore Courses
@@ -237,11 +237,9 @@ const CoursesPage = () => {
                             <span className="font-bold text-green-600">₹0</span>
                           </div>
 
+                          {/* Changed: redirect to course preview instead of opening enroll popup */}
                           <button
-                            onClick={() => {
-                              setSelectedCourse(course);
-                              setShowEnrollPopup(true);
-                            }}
+                            onClick={() => navigate(`/course-preview/${course.id}`)}
                             className="px-4 py-2 rounded-lg bg-[#2DD4BF] text-white text-xs font-semibold"
                           >
                             Enroll
