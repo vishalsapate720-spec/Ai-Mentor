@@ -11,21 +11,37 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  // 🔹 FIX: Safely initialize user state to avoid "undefined" JSON parse errors
+  const [user, setUser] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      // "undefined" string check is critical here
+      return storedUser && storedUser !== "undefined" ? JSON.parse(storedUser) : null;
+    } catch (error) {
+      console.error("AuthContext: Error parsing user from localStorage", error);
+      return null;
+    }
+  });
 
+  const [isAuthenticated, setIsAuthenticated] = useState(!!user);
+
+  // Sync authentication state whenever user changes
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
-    if (token && storedUser) {
+    
+    // Check if both exist and are valid
+    if (token && storedUser && storedUser !== "undefined") {
       setIsAuthenticated(true);
-      setUser(JSON.parse(storedUser));
+    } else {
+      setIsAuthenticated(false);
     }
-  }, []);
+  }, [user]);
 
   const login = (userData) => {
     setIsAuthenticated(true);
     setUser(userData);
+    // Ensure token is extracted correctly from the response object
     localStorage.setItem('token', userData.token);
     localStorage.setItem('user', JSON.stringify(userData));
   };
@@ -35,7 +51,7 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5000/api/users/profile', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -56,17 +72,24 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    // Clear course progress from localStorage
+    
+    // Clear specific session data like course progress
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('course-progress-')) {
         localStorage.removeItem(key);
       }
     });
+    
+    // Safety: Clear everything to prevent stale data
+    localStorage.clear(); 
   };
 
   const updateUser = (updatedUserData) => {
-    setUser(prev => ({ ...prev, ...updatedUserData }));
-    localStorage.setItem('user', JSON.stringify(updatedUserData));
+    setUser(prev => {
+      const newUser = { ...prev, ...updatedUserData };
+      localStorage.setItem('user', JSON.stringify(newUser));
+      return newUser;
+    });
   };
 
   const value = {
