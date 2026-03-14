@@ -41,9 +41,19 @@ router.post("/generate-video", protect, async (req, res) => {
 
    if (cachedVideo) {
       console.log("🎯 Cache found. Verifying file exists...");
-      // If already a Cloudinary URL, trust it directly — no local check needed
-      if (cachedVideo.videoUrl.startsWith("https://")) {
-        console.log("✅ Cloudinary URL found. Serving directly.");
+      // If already a trusted Cloudinary URL, return it directly — no local check needed
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(cachedVideo.videoUrl);
+      } catch (e) {
+        parsedUrl = null;
+      }
+      if (
+        parsedUrl &&
+        parsedUrl.protocol === "https:" &&
+        parsedUrl.hostname.endsWith("res.cloudinary.com")
+      ) {
+        console.log("✅ Trusted Cloudinary URL found. Serving directly.");
         return res.json({
           videoUrl: cachedVideo.videoUrl,
           transcriptName: cachedVideo.transcriptName,
