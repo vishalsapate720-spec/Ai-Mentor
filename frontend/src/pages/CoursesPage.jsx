@@ -23,6 +23,21 @@ const CoursesPage = () => {
   const [showEnrollPopup, setShowEnrollPopup] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
+  const [showExploreFilter, setShowExploreFilter] = useState(false);
+  const [selectedExploreCategory, setSelectedExploreCategory] = useState("all");
+
+  const exploreCategories = [
+  "all",
+  ...new Set(exploreCourses.map((course) => course.category))
+  ];
+
+  const filteredExploreCourses =
+  selectedExploreCategory === "all"
+    ? exploreCourses
+    : exploreCourses.filter(
+        (course) => course.category === selectedExploreCategory
+      );
+
   /* ================= FETCH COURSES ================= */
   useEffect(() => {
     const fetchCourses = async () => {
@@ -185,7 +200,7 @@ const CoursesPage = () => {
             {activeTab === "my-courses" && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {myCourses.length === 0 && (
-                  <p className="text-slate-500">
+                  <p className="text-slate-500 col-span-full text-center">
                     {t("courses.not_enrolled")}
                   </p>
                 )}
@@ -231,57 +246,97 @@ const CoursesPage = () => {
             )}
 
             {/* ================= EXPLORE COURSES ================= */}
-            {activeTab === "explore" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                {exploreCourses
-                  .filter(
-                    (course) => !myCourses.some((c) => c.id === course.id)
-                  )
-                  .map((course) => (
-                    <div
-                      key={course.id}
-                      className="bg-card rounded-3xl border border-border overflow-hidden shadow-sm"
-                    >
-                      <div className="relative h-40">
-                        <img
-                          src={course.image}
-                          className="w-full h-full object-cover"
-                          alt={course.title}
+          {activeTab === "explore" && (
+              <div className="space-y-6">
+
+                  {/* FILTER BUTTON */}
+                  <div className="relative flex justify-end text-slate-500">
+                    <button onClick={() => setShowExploreFilter(!showExploreFilter)}>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-8 h-8 text-slate-500 cursor-pointer hover:text-teal-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 4h18l-7 8v6l-4 2v-8L3 4z"
                         />
-                        <div className="absolute bottom-3 right-3 bg-white px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow">
-                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                          {course.rating}
-                        </div>
+                      </svg>
+                    </button>
+
+                    {showExploreFilter && (
+                      <div className="absolute right-0 mt-10 bg-white border rounded-lg shadow-xl p-2 z-50 min-w-[150px]">
+                        {exploreCategories.map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => {
+                              setSelectedExploreCategory(cat);
+                              setShowExploreFilter(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 rounded hover:bg-teal-500 hover:text-white capitalize ${
+                              selectedExploreCategory === cat
+                                ? "font-bold text-teal-600"
+                                : ""
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
                       </div>
+                    )}
+                  </div>
 
-                      <div className="p-4 space-y-3">
-                        <h3 className="text-sm font-semibold">
-                          {course.title}
-                        </h3>
-
-                        <p className="text-xs text-muted">
-                          {course.lessons} lessons • {course.level}
-                        </p>
-
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="line-through text-sm text-slate-400 mr-2">
-                              {course.price}
-                            </span>
-                            <span className="font-bold text-green-600">₹0</span>
+                  {/* COURSE GRID */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                    {filteredExploreCourses
+                      .filter((course) => !myCourses.some((c) => c.id === course.id))
+                      .map((course) => (
+                        <div
+                          key={course.id}
+                          className="bg-card rounded-3xl border border-border overflow-hidden shadow-sm"
+                        >
+                          <div className="relative h-40">
+                            <img
+                              src={course.image}
+                              className="w-full h-full object-cover"
+                              alt={course.title}
+                            />
+                            <div className="absolute bottom-3 right-3 bg-white px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow">
+                              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                              {course.rating}
+                            </div>
                           </div>
 
-                          {/* Changed: redirect to course preview instead of opening enroll popup */}
-                          <button
-                            onClick={() => navigate(`/course-preview/${course.id}`)}
-                            className="px-4 py-2 rounded-lg bg-[#2DD4BF] text-white text-xs font-semibold"
-                          >
-                            {t("common.enroll")}
-                          </button>
+                          <div className="p-4 space-y-3">
+                            <h3 className="text-sm font-semibold">{course.title}</h3>
+
+                            <p className="text-xs text-muted">
+                              {course.lessons} lessons • {course.level}
+                            </p>
+
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <span className="line-through text-sm text-slate-400 mr-2">
+                                  {course.price}
+                                </span>
+                                <span className="font-bold text-green-600">₹0</span>
+                              </div>
+
+                              <button
+                                onClick={() => navigate(`/course-preview/${course.id}`)}
+                                className="px-4 py-2 rounded-lg bg-[#2DD4BF] text-white text-xs font-semibold"
+                              >
+                                {t("common.enroll")}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      ))}
+                  </div>
               </div>
             )}
           </div>
