@@ -537,6 +537,126 @@
     }
   },
   "4": {
+  "modules": [
+    {
+      "id": "module-1",
+      "title": "Module 1: Introduction to MongoDB",
+      "lessons": [
+        {
+          "id": "what-is-mongodb",
+          "title": "What is MongoDB?",
+          "duration": "12 min",
+          "completed": false,
+          "playing": true,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=-56x56UppqQ"
+        },
+        {
+          "id": "nosql-vs-sql",
+          "title": "NoSQL vs SQL",
+          "duration": "15 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=Q7c7zF7W9n8"
+        }
+      ]
+    },
+    {
+      "id": "module-2",
+      "title": "Module 2: MongoDB Basics",
+      "lessons": [
+        {
+          "id": "install-mongodb",
+          "title": "Installing MongoDB",
+          "duration": "10 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=FwMwO8pXfq0"
+        },
+        {
+          "id": "collections-documents",
+          "title": "Collections & Documents",
+          "duration": "14 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=ofme2o29ngU"
+        }
+      ]
+    },
+    {
+      "id": "module-3",
+      "title": "Module 3: CRUD Operations",
+      "lessons": [
+        {
+          "id": "insert-data",
+          "title": "Insert Data",
+          "duration": "18 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=ExcRbA7fy_A"
+        },
+        {
+          "id": "read-data",
+          "title": "Read Data",
+          "duration": "16 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=2QQGWYe7IDU"
+        },
+        {
+          "id": "update-delete",
+          "title": "Update & Delete",
+          "duration": "20 min",
+          "completed": false,
+          "playing": false,
+          "type": "video",
+          "youtubeUrl": "https://www.youtube.com/watch?v=HcW5Ue7hV7E"
+        }
+      ]
+    }
+  ],
+  "course": {
+    "title": "MongoDB Basics",
+    "subtitle": "NoSQL Database for Beginners",
+    "logo": "/AI_Tutor_New_UI/Dashboard/MongoDB.png",
+    "progress": 0
+  },
+  "currentLesson": {
+    "id": "what-is-mongodb",
+    "title": "What is MongoDB?",
+    "module": "Module 1: Introduction to MongoDB",
+    "youtubeUrl": "https://www.youtube.com/watch?v=-56x56UppqQ",
+    "content": {
+      "introduction": "MongoDB is a NoSQL database that stores data in flexible, JSON-like documents. It is widely used for scalable and modern web applications.",
+      "keyConcepts": [
+        {
+          "title": "NoSQL Database",
+          "description": "Stores data in flexible formats instead of tables.",
+          "borderColor": "border-[#60A5FA]",
+          "bgColor": "bg-white",
+          "textColor": "text-black"
+        },
+        {
+          "title": "Documents",
+          "description": "MongoDB stores data as JSON-like documents.",
+          "borderColor": "border-[#C084FC]",
+          "bgColor": "bg-white",
+          "textColor": "text-black"
+        },
+        {
+          "title": "Collections",
+          "description": "Groups of documents similar to tables in SQL.",
+          "borderColor": "border-[#22D3EE]",
+          "bgColor": "bg-[#1F2937]",
+          "textColor": "text-white",
+          "descriptionColor": "text-[#D1D5DB]"
+        }
+      ]
     "modules": [
       {
         "id": "module-1",
