@@ -120,16 +120,6 @@ const Analytics = () => {
     localStorage.setItem("calendarTasks", JSON.stringify(tasks));
   }, [tasks]);
 
-  // Dark mode effect with localStorage persistence
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDarkMode]);
 
   const totalCourses = user?.purchasedCourses?.length || 0;
 
