@@ -55,6 +55,7 @@ const App = () => {
 
         {/* Protected Routes with shared Header + Sidebar layout */}
         <Route element={<ProtectedRoute />}>
+          {/* Complete Profile Route */}
           <Route path="/complete-profile" element={<CompleteProfilePage />} />
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
