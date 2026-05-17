@@ -35,6 +35,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (location.state?.logoutSuccess) {
@@ -47,6 +48,7 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
       const validationResult = loginSchema.parse({ email, password });
       const response = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
@@ -65,8 +67,13 @@ const LoginPage = () => {
       } else {
         toast.error(err.response?.data?.message || "Invalid Credentials!");
       }
-    }
-  };
+      } finally {
+  setLoading(false);
+}
+};
+
+    
+  
 
   return (
     <AuthLayout title="Welcome Back!" subtitle="Access your AI Learning Journey.">
@@ -88,9 +95,20 @@ const LoginPage = () => {
           </Link>
         </div>
 
-        <button type="submit" className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-teal-400 text-white font-black shadow-lg hover:scale-[1.02] transition-all">
-          LOG IN
-        </button>
+        <button
+  type="submit"
+  disabled={loading}
+  className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-teal-400 text-white font-black shadow-lg transition-all disabled:opacity-70"
+>
+  {loading ? (
+    <div className="flex items-center justify-center gap-2">
+      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      Logging in...
+    </div>
+  ) : (
+    "LOG IN"
+  )}
+</button>
       </form>
 
       <SocialLogin />
