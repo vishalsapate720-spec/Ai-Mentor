@@ -33,6 +33,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const { user, fetchUserProfile } = useAuth();
   const navigate = useNavigate();
+  const [data, setData] = useState(null);
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -44,11 +45,19 @@ const Dashboard = () => {
           "Content-Type": "application/json",
         };
 
-        const [coursesRes, statsRes] = await Promise.all([
+        const [coursesRes, statsRes,res] = await Promise.all([
           fetch("/api/courses", { headers }),
           fetch("/api/courses/stats/cards", { headers }),
+          fetch("/api/certificate/list", {headers}),
         ]);
 
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+         if (!res.ok) {
+          console.error(`Failed to fetch certificates: ${res.status}`);
+        }
         if (!coursesRes.ok) {
           throw new Error(`Courses API failed: ${coursesRes.status}`);
         }
@@ -58,9 +67,6 @@ const Dashboard = () => {
 
         const allCourses = await coursesRes.json();
         const { statsCards } = await statsRes.json();
-
-        console.log("Fetched allCourses:", allCourses);
-        console.log("Fetched statsCards:", statsCards);
 
         setCoursesData({ allCourses, statsCards });
         await fetchUserProfile();
@@ -74,52 +80,46 @@ const Dashboard = () => {
 
     fetchAllData();
   }, []);
-
   const calculateStats = () => {
-    console.log("Calculating stats with user:", user);
-    console.log("coursesData:", coursesData);
-
-    const defaultCards = [
-      {
-        icon: <Play className="w-5 h-5 text-blue-600" />,
-        value: "0",
-        label: "Ongoing Courses",
-        change: "+0%",
-        bgColor: "bg-blue-50",
-        iconBg: "bg-blue-100",
-      },
-      {
-        icon: <CheckCircle className="w-5 h-5 text-green-600" />,
-        value: "0",
-        label: "Completed",
-        change: "+0",
-        bgColor: "bg-green-50",
-        iconBg: "bg-green-100",
-      },
-      {
-        icon: <Award className="w-5 h-5 text-purple-600" />,
-        value: "0",
-        label: "Certificates",
-        change: "+0",
-        bgColor: "bg-purple-50",
-        iconBg: "bg-purple-100",
-      },
-      {
-        icon: <Clock className="w-5 h-5 text-orange-600" />,
-        value: "0h",
-        label: "Hours Spent",
-        change: "+0h",
-        bgColor: "bg-orange-50",
-        iconBg: "bg-orange-100",
-      },
-    ];
-
-    const baseCards = coursesData.statsCards?.length === 4 
-      ? coursesData.statsCards 
-      : defaultCards;
-
-    if (!user?.purchasedCourses) {
-      return baseCards;
+    if (
+      !user?.purchasedCourses ||
+      !coursesData.statsCards ||
+      coursesData.statsCards.length < 4
+    ) {
+      return [
+        {
+          icon: <Play className="w-5 h-5 text-blue-600" />,
+          value: data?.stats?.inProgress ?? 0,
+          label: "Ongoing Courses",
+          change: "+0%",
+          bgColor: "bg-blue-50",
+          iconBg: "bg-blue-100",
+        },
+        {
+          icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+          value: data?.stats?.completed ?? 0,
+          label: "Completed",
+          change: "+0",
+          bgColor: "bg-green-50",
+          iconBg: "bg-green-100",
+        },
+        {
+          icon: <Award className="w-5 h-5 text-purple-600" />,
+          value:data?.stats?.certificatesEarned ?? 0,
+          label: "Certificates",
+          change: "+0",
+          bgColor: "bg-purple-50",
+          iconBg: "bg-purple-100",
+        },
+        {
+          icon: <Clock className="w-5 h-5 text-orange-600" />,
+          value: "0h",
+          label: "Hours Spent",
+          change: "+0h",
+          bgColor: "bg-orange-50",
+          iconBg: "bg-orange-100",
+        },
+      ];
     }
 
     let coursesInProgress = 0;
@@ -169,14 +169,10 @@ const Dashboard = () => {
       },
     ];
 
-    console.log("Calculated stats result:", result);
     return result;
   };
 
   const dynamicStatsCards = calculateStats();
-
-  console.log("Creating myCourses with user:", user);
-  console.log("coursesData.allCourses:", coursesData.allCourses);
 
   const myCourses = coursesData.allCourses
     .filter((course) =>
@@ -218,13 +214,8 @@ const Dashboard = () => {
         progressColor: "bg-indigo-600",
       };
 
-      console.log("Mapped course:", courseData);
       return courseData;
     });
-
-  console.log("Final myCourses:", myCourses);
-
-  console.log("Creating continueLearning");
 
   const continueLearning = coursesData.allCourses
     .filter((course) =>
@@ -279,8 +270,6 @@ const Dashboard = () => {
         image: course.image,
         progressColor: progress > 75 ? "bg-cyan-600" : "bg-orange-400",
       };
-
-      console.log("Mapped continueLearning item:", continueData);
       return continueData;
     });
 
@@ -310,8 +299,6 @@ const Dashboard = () => {
       course.level?.toLowerCase().includes(normalizedSearchQuery)
     );
   });
-
-  console.log("Final continueLearning:", continueLearning);
 
   const handleBrowseCourses = () => {
     navigate("/courses", { state: { activeTab: "explore" } });
@@ -576,21 +563,7 @@ const Dashboard = () => {
                       ))}
                     </div>
                   </div>
-                ) : (
-                  <div className="p-6 text-center text-muted">
-                    <p>
-                      {normalizedSearchQuery
-                        ? t("dashboard.no_courses_search")
-                        : t("dashboard.no_courses_enrolled")}
-                    </p>
-                    <button
-                      className="mt-4 px-4 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600"
-                      onClick={handleBrowseCourses}
-                    >
-                      {t("dashboard.browse_courses")}
-                    </button>
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
