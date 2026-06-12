@@ -13,6 +13,11 @@ export const CourseReports = sequelize.define(
     userId: {
       type: DataTypes.UUID,
       allowNull: false,
+      references: {
+        model: "Users", 
+        key: "id",
+      },
+      onDelete: "CASCADE", 
     },
 
     reportType: {
@@ -46,11 +51,12 @@ export const CourseReports = sequelize.define(
     },
 
     status: {
-      type: DataTypes.ENUM("pending", "resolved"),
+      type: DataTypes.ENUM("pending", "resolved","rejected"),
       defaultValue: "pending",
     },
   },
   {
     timestamps: true,
+    tableName: "CourseReports",
   },
 );

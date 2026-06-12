@@ -22,6 +22,23 @@ import {
   Award,
 } from "lucide-react";
 import Preferences from "../components/Preferences";
+import API_BASE_URL, { apiFetch } from "../lib/api";
+import FloatingAssistant from "../components/common/FloatingAssistant";
+import CourseCardMeta from "../components/common/CourseCardMeta";
+import { Helmet } from "react-helmet-async";
+
+// Add this here
+const getImageUrl = (image) => {
+  if (!image) {
+    return "https://via.placeholder.com/400x250?text=Course";
+  }
+
+  if (image.startsWith("http")) {
+    return image;
+  }
+
+  return `${API_BASE_URL}${image}`;
+};
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -45,34 +62,47 @@ const Dashboard = () => {
           "Content-Type": "application/json",
         };
 
-        const [coursesRes, statsRes,res] = await Promise.all([
+        const [coursesResult, statsResult, certResult] = await Promise.allSettled([
           fetch("/api/courses", { headers }),
           fetch("/api/courses/stats/cards", { headers }),
-          fetch("/api/certificate/list", {headers}),
+          fetch("/api/certificate/list", { headers }),
         ]);
 
-        if (res.ok) {
+        const coursesRes = coursesResult.status === "fulfilled" ? coursesResult.value : null;
+        const statsRes = statsResult.status === "fulfilled" ? statsResult.value : null;
+        const res = certResult.status === "fulfilled" ? certResult.value : null;
+
+        if (res && res.ok) {
           const json = await res.json();
           setData(json);
-        }
-         if (!res.ok) {
+        } else if (res && !res.ok) {
           console.error(`Failed to fetch certificates: ${res.status}`);
         }
-        if (!coursesRes.ok) {
-          throw new Error(`Courses API failed: ${coursesRes.status}`);
+        if (!coursesRes || !coursesRes.ok) {
+          throw new Error(`Courses API failed: ${coursesRes?.status}`);
         }
-        if (!statsRes.ok) {
-          throw new Error(`Stats API failed: ${statsRes.status}`);
+        if (!statsRes || !statsRes.ok) {
+          throw new Error(`Stats API failed: ${statsRes?.status}`);
         }
 
         const allCourses = await coursesRes.json();
+
+console.log("ALL COURSES DATA:");
+console.log(allCourses);
+
+allCourses.forEach((course) => {
+  console.log({
+    id: course.id,
+    title: course.title,
+    image: course.image,
+  });
+});
+console.log(allCourses);
         const { statsCards } = await statsRes.json();
 
         setCoursesData({ allCourses, statsCards });
-        await fetchUserProfile();
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
-        console.log("Error details:", error);
       } finally {
         setLoading(false);
       }
@@ -80,46 +110,49 @@ const Dashboard = () => {
 
     fetchAllData();
   }, []);
+
   const calculateStats = () => {
+    const baseCards = [
+      {
+        icon: <Play className="w-5 h-5 text-blue-600" />,
+        value: data?.stats?.inProgress ?? 0,
+        label: "Ongoing Courses",
+        change: "+0%",
+        bgColor: "bg-blue-50",
+        iconBg: "bg-blue-100",
+      },
+      {
+        icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+        value: data?.stats?.completed ?? 0,
+        label: "Completed",
+        change: "+0",
+        bgColor: "bg-green-50",
+        iconBg: "bg-green-100",
+      },
+      {
+        icon: <Award className="w-5 h-5 text-purple-600" />,
+        value: data?.stats?.certificatesEarned ?? 0,
+        label: "Certificates",
+        change: "+0",
+        bgColor: "bg-purple-50",
+        iconBg: "bg-purple-100",
+      },
+      {
+        icon: <Clock className="w-5 h-5 text-orange-600" />,
+        value: "0h",
+        label: "Hours Spent",
+        change: "+0h",
+        bgColor: "bg-orange-50",
+        iconBg: "bg-orange-100",
+      },
+    ];
+
     if (
       !user?.purchasedCourses ||
       !coursesData.statsCards ||
       coursesData.statsCards.length < 4
     ) {
-      return [
-        {
-          icon: <Play className="w-5 h-5 text-blue-600" />,
-          value: data?.stats?.inProgress ?? 0,
-          label: "Ongoing Courses",
-          change: "+0%",
-          bgColor: "bg-blue-50",
-          iconBg: "bg-blue-100",
-        },
-        {
-          icon: <CheckCircle className="w-5 h-5 text-green-600" />,
-          value: data?.stats?.completed ?? 0,
-          label: "Completed",
-          change: "+0",
-          bgColor: "bg-green-50",
-          iconBg: "bg-green-100",
-        },
-        {
-          icon: <Award className="w-5 h-5 text-purple-600" />,
-          value:data?.stats?.certificatesEarned ?? 0,
-          label: "Certificates",
-          change: "+0",
-          bgColor: "bg-purple-50",
-          iconBg: "bg-purple-100",
-        },
-        {
-          icon: <Clock className="w-5 h-5 text-orange-600" />,
-          value: "0h",
-          label: "Hours Spent",
-          change: "+0h",
-          bgColor: "bg-orange-50",
-          iconBg: "bg-orange-100",
-        },
-      ];
+      return baseCards;
     }
 
     let coursesInProgress = 0;
@@ -304,6 +337,40 @@ const Dashboard = () => {
     navigate("/courses", { state: { activeTab: "explore" } });
   };
 
+  const enrollAndPreview = async (course) => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      // If the course is free, attempt enrollment first
+      const priceValue = Number(course.priceValue || 0);
+      if (priceValue === 0) {
+        const res = await fetch(`${API_BASE_URL}/api/users/purchase-course`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({ courseId: course.id, courseTitle: course.title }),
+        });
+        const data = await res.json().catch(() => ({}));
+        // Refresh user profile so purchasedCourses is updated across the app
+        if (typeof fetchUserProfile === 'function') await fetchUserProfile();
+        // notify pages to refresh their course lists
+        window.dispatchEvent(new Event('refreshCourses'));
+      }
+
+      // After ensuring enrollment (or for paid courses), navigate to preview
+      navigate(`/course-preview/${course.id}`);
+    } catch (err) {
+      console.error('Enroll+Preview error:', err);
+      // still navigate to preview so user can complete payment/see enroll UI
+      navigate(`/course-preview/${course.id}`);
+    }
+  };
+
   if (loading) {
     return (
       <main className="flex-1 p-4 md:p-6 lg:p-8 flex items-center justify-center">
@@ -317,6 +384,15 @@ const Dashboard = () => {
 
   return (
     <main className="flex-1 overflow-x-hidden overflow-y-auto bg-canvas-alt p-6">
+      <Helmet>
+            <title>Dashboard | UptoSkills</title>
+            <meta 
+                name="description" 
+                content="Track your learning progress, enrolled courses and certificates on UptoSkills." 
+            />
+            <meta property="og:title" content="Dashboard | UptoSkills" />
+            <meta property="og:type" content="website" />
+        </Helmet>
       <Preferences
         key={localStorage.getItem("token")}
         mode="modal"
@@ -406,19 +482,29 @@ const Dashboard = () => {
                   className="bg-card rounded-xl border border-border w-64 flex-shrink-0 shadow-sm transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-2 hover:scale-[1.03] hover:border-teal-400/50"
                 >
                   {/* Image */}
-                  <div className="relative h-40">
-                    <img
-                      src={course.image}
-                      alt={course.title}
-                      className="w-full h-full object-cover rounded-t-xl"
-                    />
 
-                    {/* Rating */}
-                    <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded-full flex items-center gap-1">
-                      <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                      <span className="text-xs text-white font-semibold">
-                        {course.rating}
-                      </span>
+                  <div className="relative h-40">
+ <img
+  src={
+  course.title === "React Fundamentals"
+    ? "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+    : course.title === "Python For AI"
+    ? "/AI_Tutor_New_UI/Dashboard/python_for_ai_logo.png"
+    : course.title === "AI Ethics & Bias"
+    ? "/AI_Tutor_New_UI/Dashboard/data_analytics.png"
+    : course.title === "MongoDB Fundamentals"
+    ? "/AI_Tutor_New_UI/Dashboard/MongoDB.png"
+    : course.title === "PostgreSQL"
+? "/AI_Tutor_New_UI/Dashboard/logo.png"
+    : "/AI_Tutor_New_UI/Dashboard/logo.png"
+}
+  alt={course.title}
+  className="w-full h-full object-cover rounded-t-xl"
+/>
+
+                    {/* Rating & Reviews */}
+                    <div className="absolute bottom-2 right-2">
+                      <CourseCardMeta courseId={course.id} />
                     </div>
                   </div>
 
@@ -432,20 +518,26 @@ const Dashboard = () => {
                       {course.lessons} • {course.level}
                     </p>
 
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="font-bold text-green-500">
-                        {course.priceValue === 0
-                          ? "Free"
-                          : `₹${course.priceValue}`}
-                      </span>
+                    {(() => {
+                      const isEnrolled = Array.isArray(user?.purchasedCourses) && user.purchasedCourses.some(c => String(c?.id ?? c?.courseId ?? c?.course?.id) === String(course.id));
+                      return (
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="font-bold text-green-500">
+                            {course.priceValue === 0
+                              ? "Free"
+                              : `₹${course.priceValue}`}
+                          </span>
 
-                      <button
-                        onClick={() => navigate(`/course-preview/${course.id}`)}
-                        className="px-3 py-1.5 text-xs bg-teal-500 text-white rounded-lg hover:bg-teal-600"
-                      >
-                        {t("dashboard.enroll")}
-                      </button>
-                    </div>
+                          <button
+                            onClick={() => enrollAndPreview(course)}
+                            disabled={isEnrolled}
+                            className={`px-3 py-1.5 text-xs rounded-lg ${isEnrolled ? 'bg-emerald-100 text-emerald-700 cursor-default' : 'bg-teal-500 text-white hover:bg-teal-600'}`}
+                          >
+                            {isEnrolled ? 'Enrolled' : t("dashboard.enroll")}
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               ))}
@@ -485,11 +577,24 @@ const Dashboard = () => {
                               to={`/learning/${course.id}`}
                               className="flex items-center"
                             >
-                              <img
-                                src={course.image}
-                                alt={course.title}
-                                className="w-12 h-12 rounded-lg mr-4"
-                              />
+                            <img
+  src={
+    course.title === "React Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+      : course.title === "Python For AI"
+      ? "/AI_Tutor_New_UI/Dashboard/python_for_ai_logo.png"
+      : course.title === "AI Ethics & Bias"
+      ? "/AI_Tutor_New_UI/Dashboard/data_analytics.png"
+      : course.title === "PostgreSQL"
+      ? "/AI_Tutor_New_UI/Dashboard/postgresql.png"
+      : course.title === "MongoDB Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/MongoDB.png"
+      : "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+  }
+  alt={course.title}
+  className="w-12 h-12 rounded-lg mr-4"
+  loading="lazy"
+/>
                               <div>
                                 <div className="font-medium text-main hover:text-indigo-600">
                                   {course.title}
@@ -537,11 +642,21 @@ const Dashboard = () => {
                           className="flex items-center justify-between p-3 rounded-lg border border-border bg-canvas-alt"
                         >
                           <div className="flex items-center min-w-0">
-                            <img
-                              src={course.image}
-                              alt={course.title}
-                              className="w-12 h-12 rounded-lg mr-4"
-                            />
+                          <img
+  src={
+    course.title === "React Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+      : course.title === "Python For AI"
+      ? "/AI_Tutor_New_UI/Dashboard/python_for_ai_logo.png"
+      : course.title === "AI Ethics & Bias"
+      ? "/AI_Tutor_New_UI/Dashboard/data_analytics.png"
+      : course.title === "MongoDB Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/MongoDB.png"
+      : "/AI_Tutor_New_UI/Dashboard/logo.png"
+  }
+  alt={course.title}
+  className="w-full h-full object-cover rounded-t-xl"
+/>
                             <div className="min-w-0">
                               <div className="font-medium text-main truncate">
                                 {course.title}
@@ -552,9 +667,7 @@ const Dashboard = () => {
                             </div>
                           </div>
                           <button
-                            onClick={() =>
-                              navigate(`/course-preview/${course.id}`)
-                            }
+                            onClick={() => enrollAndPreview(course)}
                             className="ml-3 px-3 py-2 bg-teal-500 text-white text-xs font-medium rounded-lg hover:bg-teal-600"
                           >
                             {t("dashboard.view")}
@@ -563,7 +676,21 @@ const Dashboard = () => {
                       ))}
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="p-6 text-center text-muted">
+                    <p>
+                      {normalizedSearchQuery
+                        ? t("dashboard.no_courses_search")
+                        : t("dashboard.no_courses_enrolled")}
+                    </p>
+                    <button
+                      className="mt-4 px-4 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600"
+                      onClick={handleBrowseCourses}
+                    >
+                      {t("dashboard.browse_courses")}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -584,11 +711,24 @@ const Dashboard = () => {
                           to={`/course-preview/${item.id}`}
                           className="flex items-center flex-1"
                         >
-                          <img
-                            src={item.image}
-                            alt={item.title}
-                            className="w-12 h-12 rounded-lg mr-4"
-                          />
+ <img
+  src={
+    item.title === "React Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+      : item.title === "Python For AI"
+      ? "/AI_Tutor_New_UI/Dashboard/python_for_ai_logo.png"
+      : item.title === "AI Ethics & Bias"
+      ? "/AI_Tutor_New_UI/Dashboard/data_analytics.png"
+      : item.title === "PostgreSQL"
+      ? "/AI_Tutor_New_UI/Dashboard/postgresql.png"
+      : item.title === "MongoDB Fundamentals"
+      ? "/AI_Tutor_New_UI/Dashboard/MongoDB.png"
+      : "/AI_Tutor_New_UI/Dashboard/react_fundamentals_logo.png"
+  }
+  alt={item.title}
+  className="w-12 h-12 rounded-lg mr-4"
+  loading="lazy"
+/>
                           <div className="flex-1">
                             <h3 className="font-medium text-main mb-1 hover:text-teal-600">
                               {item.title}
@@ -616,23 +756,11 @@ const Dashboard = () => {
                 </div>
               </div>
             ) : null
-            // <div className="p-6  text-muted">
-            //   <p>
-            //     {normalizedSearchQuery
-            //       ? "No in-progress courses match your search."
-            //       : "Start Learning to get your progress tracked!"}
-            //   </p>
-            //   <button
-            //     className="mt-4 px-4 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600"
-            //     onClick={() => navigate("/courses")}
-            //   >
-            //     My Courses
-            //   </button>
-            // </div>
             }
           </div>
         </div>
       </div>
+      <FloatingAssistant />
     </main>
   );
 };

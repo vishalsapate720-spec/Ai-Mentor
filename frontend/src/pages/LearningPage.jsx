@@ -298,73 +298,143 @@ export default function Learning() {
         setAiVideoUrl(null);
 
         try {
-          const payload = {
-            courseId: parseInt(courseId),
-            lessonId: learningData.currentLesson.id,
-            celebrity: selectedCelebrity.split(" ")[0].toLowerCase(), // ✅ sends "salman"
-          };
+  const payload = {
+    courseId: parseInt(courseId),
+    lessonId: learningData.currentLesson.id,
+    celebrity: selectedCelebrity.split(" ")[0].toLowerCase(),
+  };
 
           const data = await getAIVideo(payload);
+          console.log("AI RESPONSE =", data);
 
-          if (data?.videoUrl) {
+          if (data?.jobId || data?.videoUrl || data?.cloudinary_url) {
             let isReady = data.cached || false;
             let attempts = 0;
 
-            if (!isReady) {
-              while (!isReady && attempts < 60) {
-                const statusRes = await fetch(`/api/ai/status/${data.jobId}`, {
-                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-                });
-                const statusData = await statusRes.json();
-                if (statusData.status === "ready") {
-                  isReady = true;
-                  if (statusData.cloudinary_url) data.videoUrl = statusData.cloudinary_url;
-                  break;
-                }
-                if (statusData.status === "failed") throw new Error("Video generation failed.");
-                attempts++;
-                await new Promise((r) => setTimeout(r, 1000));
-              }
-            }
+           if (!isReady) {
+  while (!isReady && attempts < 60) {
+    const statusRes = await fetch(`/api/ai/status/${data.jobId}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
 
-            if (!isReady) throw new Error("Video generation timed out.");
+    const statusData = await statusRes.json();
 
-            if (
-              lastLessonIdRef.current !== learningData.currentLesson.id ||
-              lastCelebrityRef.current !== selectedCelebrity
-            ) return;
+    console.log("STATUS DATA =", statusData);
 
-            setAiVideoUrl(data.videoUrl);
+    if (statusData.status === "ready") {
+      isReady = true;
 
-            if (data.transcriptName) {
-              try {
-                const trRes = await fetch(`/api/ai/transcript/${data.transcriptName}`, {
-                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-                });
-                if (trRes.ok) {
-                  const trData = await trRes.json();
-                  setGeneratedTextContent(trData.content);
-                }
-              } catch (trErr) {
-                console.error("Transcript error:", trErr);
-              }
-            }
+      if (statusData.cloudinary_url) {
+        data.videoUrl = statusData.cloudinary_url;
+      }
 
-            setIsPlaying(true);
-            saveLessonData(learningData.currentLesson.id, {
-              generatedTextContent: data.textContent || "",
-              aiVideoUrl: data.videoUrl,
-              celebrity: selectedCelebrity,
-            });
-          }
-        } catch (error) {
-          console.error("AI video error:", error);
-          setGeneratedTextContent("");
-          setAiVideoUrl(null);
-          setIsPlaying(false);
-        } finally {
-          setIsAIVideoLoading(false);
+      break;
+    }
+
+    attempts++;
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+  // CASE 1: cached video — videoUrl is already available
+  if (data?.cached && data?.videoUrl) {
+    setAiVideoUrl(data.videoUrl);
+
+    if (data.transcriptName) {
+      try {
+        const trRes = await fetch(`/api/ai/transcript/${data.transcriptName}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (trRes.ok) {
+          const trData = await trRes.json();
+          setGeneratedTextContent(trData.content);
         }
+      } catch (trErr) {
+        console.error("Transcript error:", trErr);
+      }
+    }
+
+            setAiVideoUrl(data.videoUrl || data.cloudinary_url);
+    setIsPlaying(true);
+    saveLessonData(learningData.currentLesson.id, {
+      generatedTextContent: "",
+      aiVideoUrl: data.videoUrl,
+      celebrity: selectedCelebrity,
+    });
+    return;
+  }
+
+  // CASE 2: new job — poll status until ready
+  const jobId = data?.jobId;
+  if (!jobId) throw new Error("No jobId returned from server.");
+
+  let finalVideoUrl = null;
+  let finalTranscriptName = data?.transcriptName || null;
+  let attempts = 0;
+
+  while (attempts < 120) {
+    await new Promise((r) => setTimeout(r, 1000));
+
+    const statusRes = await fetch(`/api/ai/status/${jobId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    });
+    const statusData = await statusRes.json();
+
+    if (statusData.status === "ready") {
+      finalVideoUrl = statusData.cloudinary_url || null;
+      if (statusData.transcript_name) finalTranscriptName = statusData.transcript_name;
+      break;
+    }
+
+    if (statusData.status === "failed") {
+      throw new Error("Video generation failed.");
+    }
+
+    attempts++;
+  }
+
+  if (!finalVideoUrl) throw new Error("Video generation timed out or no URL returned.");
+
+  // Guard: user may have navigated away
+  if (
+    lastLessonIdRef.current !== learningData.currentLesson.id ||
+    lastCelebrityRef.current !== selectedCelebrity
+  ) return;
+
+  setAiVideoUrl(finalVideoUrl);
+
+  if (finalTranscriptName) {
+    try {
+      const trRes = await fetch(`/api/ai/transcript/${finalTranscriptName}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (trRes.ok) {
+        const trData = await trRes.json();
+        setGeneratedTextContent(trData.content);
+      }
+    } catch (trErr) {
+      console.error("Transcript error:", trErr);
+    }
+  }
+
+  setIsPlaying(true);
+  saveLessonData(learningData.currentLesson.id, {
+    generatedTextContent: "",
+    aiVideoUrl: finalVideoUrl,
+    celebrity: selectedCelebrity,
+  });
+
+} catch (error) {
+  console.error("AI video error:", error);
+  setGeneratedTextContent("");
+  setAiVideoUrl(null);
+  setIsPlaying(false);
+} finally {
+  setIsAIVideoLoading(false);
+}
       } else {
         setIsAIVideoLoading(false);
         setGeneratedTextContent("");

@@ -9,18 +9,37 @@ export const getAllUsers = async (req, res) => {
     // skip calculate karo
     const offset = (page - 1) * limit;
 
-    const users = await User.findAndCountAll({
-      attributes: [
-        "id",
-        "name",
-        "email",
-        "role",
-        "purchasedCourses",
-        "createdAt",
-      ],
-      limit,
-      offset,
-    });
+    const { search, status } = req.query;
+const { Op } = await import("sequelize");
+
+const where = {};
+
+if (search) {
+  where[Op.or] = [
+    { name: { [Op.iLike]: `%${search}%` } },
+    { email: { [Op.iLike]: `%${search}%` } },
+  ];
+}
+
+if (status && status !== "all") {
+  where.status = status;
+}
+
+const users = await User.findAndCountAll({
+  attributes: [
+    "id",
+    "name",
+    "email",
+    "role",
+    "purchasedCourses",
+    "createdAt",
+    "status",
+  ],
+  where,
+  limit,
+  offset,
+  order: [["createdAt", "DESC"]],
+});
 
     res.status(200).json({
       success: true,
@@ -30,7 +49,7 @@ export const getAllUsers = async (req, res) => {
       data: users.rows,
     });
   } catch (error) {
-    console.error("GET USERS ERROR:", error);
+    console.error("GET USERS ERROR:", error.message || error);
     res.status(500).json({
       success: false,
       message: "Server Error: " + error.message,
@@ -57,7 +76,7 @@ export const updateUserStatus = async (req, res) => {
 
     res.status(200).json({ success: true, data: user });
   } catch (error) {
-    console.error("UPDATE STATUS ERROR:", error);
+    console.error("UPDATE STATUS ERROR:", error.message || error);
     res.status(500).json({ success: false, message: "Server Error: " + error.message });
   }
 };
@@ -73,7 +92,7 @@ export const deleteUser = async (req, res) => {
     await user.destroy();
     res.status(200).json({ success: true, message: "User deleted successfully" });
   } catch (error) {
-    console.error("DELETE USER ERROR:", error);
+    console.error("DELETE USER ERROR:", error.message || error);
     res.status(500).json({ success: false, message: "Server Error: " + error.message });
   }
 };

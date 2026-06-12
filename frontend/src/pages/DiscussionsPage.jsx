@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   MoreVertical,
 } from "lucide-react";
+import FloatingAssistant from "../components/common/FloatingAssistant";
 
 //helpers
 const getRelativeTime = (dateStr) => {
@@ -103,10 +104,14 @@ const DiscussionsPage = () => {
   const [coursePosts, setCoursePosts] = useState([]);
   const [coursePostsLoading, setCoursePostsLoading] = useState(false);
   const [courseSort, setCourseSort] = useState("Recent");
+  const [coursePostsPage, setCoursePostsPage] = useState(1);
+  const [coursePostsTotalPages, setCoursePostsTotalPages] = useState(1);
   const [selectedCourse, setSelectedCourse] = useState(null); // { courseId, courseName }
   const [panelPosts, setPanelPosts] = useState([]);
   const [panelLoading, setPanelLoading] = useState(false);
   const [panelSort, setPanelSort] = useState("Recent");
+  const [panelPage, setPanelPage] = useState(1);
+  const [panelTotalPages, setPanelTotalPages] = useState(1);
   const [panelReplyText, setPanelReplyText] = useState("");
   const [panelReplyingTo, setPanelReplyingTo] = useState(null);
   const [panelReplyInputText, setPanelReplyInputText] = useState("");
@@ -117,6 +122,8 @@ const DiscussionsPage = () => {
   const [globalPosts, setGlobalPosts] = useState([]);
   const [globalLoading, setGlobalLoading] = useState(false);
   const [globalSort, setGlobalSort] = useState("Recent");
+  const [globalPage, setGlobalPage] = useState(1);
+  const [globalTotalPages, setGlobalTotalPages] = useState(1);
   const [globalCategoryFilter, setGlobalCategoryFilter] =
     useState("All Categories");
   const [globalContent, setGlobalContent] = useState("");
@@ -151,6 +158,45 @@ const DiscussionsPage = () => {
 
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState(null); // stores postId or replyId of open dropdown
+
+  // Custom category selector state
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [filterPickerOpen, setFilterPickerOpen] = useState(false);
+  const [categoryPickerPos, setCategoryPickerPos] = useState("bottom");
+  const [filterPickerPos, setFilterPickerPos] = useState("bottom");
+  const categoryPickerRef = useRef(null);
+  const filterPickerRef = useRef(null);
+
+  // Measure available space and decide open direction
+  // Panel max height ≈ 210px. Only open upward when space below is tight
+  // AND there is more room above than below.
+  const PANEL_HEIGHT = 220;
+
+  const openCategoryPicker = () => {
+    setFilterPickerOpen(false);
+    if (categoryPickerRef.current) {
+      const rect = categoryPickerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setCategoryPickerPos(
+        spaceBelow < PANEL_HEIGHT && spaceAbove > spaceBelow ? "top" : "bottom"
+      );
+    }
+    setCategoryPickerOpen((o) => !o);
+  };
+
+  const openFilterPicker = () => {
+    setCategoryPickerOpen(false);
+    if (filterPickerRef.current) {
+      const rect = filterPickerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setFilterPickerPos(
+        spaceBelow < PANEL_HEIGHT && spaceAbove > spaceBelow ? "top" : "bottom"
+      );
+    }
+    setFilterPickerOpen((o) => !o);
+  };
 
   const isAdmin = user?.role === "admin";
 
@@ -230,15 +276,21 @@ const DiscussionsPage = () => {
 
   // Course community - all posts across courses
   const fetchCoursePosts = useCallback(
-    async (sort) => {
+    async (sort, page = 1) => {
       setCoursePostsLoading(true);
       try {
-        const q = sort === "Popular" ? "?sort=popular" : "";
+        const queryParts = [`page=${page}`, `limit=10`];
+        if (sort === "Popular") queryParts.push("sort=popular");
+        const q = queryParts.length > 0 ? "?" + queryParts.join("&") : "";
         const res = await fetch(`/api/community/course-posts${q}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error();
-        setCoursePosts(await res.json());
+        const posts = await res.json();
+        const totalPages = parseInt(res.headers.get("X-Pages") || "1", 10);
+        setCoursePostsPage(page);
+        setCoursePostsTotalPages(totalPages);
+        setCoursePosts(posts);
       } catch {
         setCoursePosts([]);
       } finally {
@@ -265,11 +317,13 @@ const latestPostsByCourse = Object.values(
   
   // Course panel - posts for a specific course
   const fetchPanelPosts = useCallback(
-    async (courseId, sort) => {
+    async (courseId, sort, page = 1) => {
       setPanelLoading(true);
       setPanelRequiresEnrollment(false);
       try {
-        const q = sort === "Popular" ? "?sort=popular" : "";
+        const queryParts = [`page=${page}`, `limit=10`];
+        if (sort === "Popular") queryParts.push("sort=popular");
+        const q = queryParts.length > 0 ? "?" + queryParts.join("&") : "";
         const res = await fetch(`/api/community/course/${courseId}${q}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -291,7 +345,11 @@ const latestPostsByCourse = Object.values(
         }
 
         if (!res.ok) throw new Error();
-        setPanelPosts(await res.json());
+        const posts = await res.json();
+        const totalPages = parseInt(res.headers.get("X-Pages") || "1", 10);
+        setPanelPage(page);
+        setPanelTotalPages(totalPages);
+        setPanelPosts(posts);
       } catch (error) {
         console.error("Error fetching panel posts:", error);
         setPanelPosts([]);
@@ -304,17 +362,23 @@ const latestPostsByCourse = Object.values(
 
   // Global posts
   const fetchGlobalPosts = useCallback(
-    async (cat, sort) => {
+    async (cat, sort, page = 1) => {
       setGlobalLoading(true);
       try {
         const params = new URLSearchParams();
+        params.set("page", page);
+        params.set("limit", 10);
         if (cat && cat !== "All Categories") params.set("category", cat);
         if (sort === "Popular") params.set("sort", "popular");
         const res = await fetch(`/api/community/global?${params}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error();
-        setGlobalPosts(await res.json());
+        const posts = await res.json();
+        const totalPages = parseInt(res.headers.get("X-Pages") || "1", 10);
+        setGlobalPage(page);
+        setGlobalTotalPages(totalPages);
+        setGlobalPosts(posts);
       } catch {
         setGlobalPosts([]);
       } finally {
@@ -696,17 +760,17 @@ const latestPostsByCourse = Object.values(
   }, [fetchAllCourses]);
 
   useEffect(() => {
-    if (activeView === "courseCommunity") fetchCoursePosts(courseSort);
-  }, [activeView, courseSort, fetchCoursePosts]);
+    if (activeView === "courseCommunity") fetchCoursePosts(courseSort, coursePostsPage);
+  }, [activeView, courseSort, coursePostsPage, fetchCoursePosts]);
 
   useEffect(() => {
     if (activeView === "global")
-      fetchGlobalPosts(globalCategoryFilter, globalSort);
-  }, [activeView, globalCategoryFilter, globalSort, fetchGlobalPosts]);
+      fetchGlobalPosts(globalCategoryFilter, globalSort, globalPage);
+  }, [activeView, globalCategoryFilter, globalSort, globalPage, fetchGlobalPosts]);
 
   useEffect(() => {
-    if (selectedCourse) fetchPanelPosts(selectedCourse.courseId, panelSort);
-  }, [selectedCourse, panelSort, fetchPanelPosts]);
+    if (selectedCourse) fetchPanelPosts(selectedCourse.courseId, panelSort, panelPage);
+  }, [selectedCourse, panelSort, panelPage, fetchPanelPosts]);
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
@@ -738,6 +802,18 @@ const latestPostsByCourse = Object.values(
       document.removeEventListener('click', handleClickOutside);
     };
   }, [openDropdown]);
+
+  // Close category pickers when clicking outside
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (categoryPickerRef.current && !categoryPickerRef.current.contains(e.target))
+        setCategoryPickerOpen(false);
+      if (filterPickerRef.current && !filterPickerRef.current.contains(e.target))
+        setFilterPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
 
   // Handlers for like, dislike, and reply actions that update the appropriate post list on success
   const handleLike = async (postId, source) => {
@@ -901,7 +977,10 @@ const latestPostsByCourse = Object.values(
                     {["Recent", "Popular"].map((s) => (
                       <button
                         key={s}
-                        onClick={() => setCourseSort(s)}
+                        onClick={() => {
+                          setCourseSort(s);
+                          setCoursePostsPage(1);
+                        }}
                         className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${
                           courseSort === s
                             ? "bg-red-500 text-white"
@@ -929,12 +1008,13 @@ const latestPostsByCourse = Object.values(
                       {allCourses.map((c) => (
                         <button
                           key={c.id}
-                          onClick={() =>
+                          onClick={() => {
+                            setPanelPage(1);
                             setSelectedCourse({
                               courseId: c.id,
                               courseName: c.title,
-                            })
-                          }
+                            });
+                          }}
                           className="bg-card border border-border rounded-xl p-4 text-left hover:border-indigo-500 transition-colors"
                         >
                           <h3 className="font-semibold text-main">{c.title}</h3>
@@ -952,12 +1032,13 @@ const latestPostsByCourse = Object.values(
                         .map((post) => (
                         <div
                           key={post.id}
-                          onClick={() =>
+                          onClick={() => {
+                            setPanelPage(1);
                             setSelectedCourse({
                               courseId: post.courseId,
                               courseName: courseNameForPost(post),
-                            })
-                          }
+                            });
+                          }}
                           className={`bg-card border border-border rounded-xl p-3 sm:p-4 md:p-5 shadow-sm hover:border-indigo-500/50 cursor-pointer transition-colors ${
                             post.hiddenAt ? "opacity-60" : ""
                           }`}
@@ -1010,6 +1091,27 @@ const latestPostsByCourse = Object.values(
                       ))}
                     </div>
 
+                    {/* course posts pagination controls */}
+                    <div className="flex items-center justify-center gap-3 py-4 mt-6 mb-4">
+                      <button
+                        disabled={coursePostsPage === 1 || coursePostsLoading}
+                        onClick={() => setCoursePostsPage(coursePostsPage - 1)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-xs font-semibold text-muted">
+                        Page {coursePostsPage} of {coursePostsTotalPages}
+                      </span>
+                      <button
+                        disabled={coursePostsPage === coursePostsTotalPages || coursePostsLoading}
+                        onClick={() => setCoursePostsPage(coursePostsPage + 1)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+
                     {/* quick-start: select a course to start new discussion */}
                     <div className="mt-8">
                       <h3 className="text-sm font-semibold text-muted mb-3 uppercase tracking-wide">
@@ -1019,12 +1121,13 @@ const latestPostsByCourse = Object.values(
                         {allCourses.map((c) => (
                           <button
                             key={c.id}
-                            onClick={() =>
+                            onClick={() => {
+                              setPanelPage(1);
                               setSelectedCourse({
                                 courseId: c.id,
                                 courseName: c.title,
-                              })
-                            }
+                              });
+                            }}
                             className="px-4 py-2 bg-card border border-border rounded-lg text-sm text-main hover:border-indigo-500 transition-colors"
                           >
                             {c.title}
@@ -1076,7 +1179,10 @@ const latestPostsByCourse = Object.values(
                     {["Recent", "Popular"].map((s) => (
                       <button
                         key={s}
-                        onClick={() => setPanelSort(s)}
+                        onClick={() => {
+                          setPanelSort(s);
+                          setPanelPage(1);
+                        }}
                         className={`flex-1 py-2.5 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
                           panelSort === s
                             ? "bg-indigo-600/10 text-indigo-500 border-b-2 border-indigo-500"
@@ -1545,6 +1651,27 @@ const latestPostsByCourse = Object.values(
                     )}
                   </div>
 
+                  {/* panel pagination controls */}
+                  <div className="flex items-center justify-center gap-3 py-3 border-t border-border shrink-0 bg-canvas-alt/50">
+                    <button
+                      disabled={panelPage === 1 || panelLoading}
+                      onClick={() => setPanelPage(panelPage - 1)}
+                      className="px-3 py-1 text-xs font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-xs font-semibold text-muted">
+                      Page {panelPage} of {panelTotalPages}
+                    </span>
+                    <button
+                      disabled={panelPage === panelTotalPages || panelLoading}
+                      onClick={() => setPanelPage(panelPage + 1)}
+                      className="px-3 py-1 text-xs font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+
                   {/* panel input */}
                   <div className="p-2 sm:p-3 border-t border-border shrink-0">
                     <div className="flex items-center gap-2">
@@ -1579,6 +1706,7 @@ const latestPostsByCourse = Object.values(
                   </div>
                 </div>
               )}
+              <FloatingAssistant/>
             </main>
           )}
 
@@ -1671,43 +1799,59 @@ const latestPostsByCourse = Object.values(
                   </div>
                   <div className="flex items-center justify-between mt-3 flex-wrap gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <select
-                          value={globalCategory}
-                          onChange={(e) => setGlobalCategory(e.target.value)}
-                          className="
-    appearance-none
-    pl-4 pr-10 py-2
-    bg-[#ff6d34]
-    hover:bg-[#e65f2c]
-    text-white
-    font-semibold
-    rounded-lg
-    shadow-md
-    border border-[#ff6d34]
-    focus:outline-none
-    focus:ring-2
-    focus:ring-[#00bea3]
-    cursor-pointer
-    transition
-    duration-200
-  "
+                      {/* ── Category picker (post composer) ── */}
+                      <div className="relative" ref={categoryPickerRef}>
+                        {/* Trigger button */}
+                        <button
+                          type="button"
+                          onClick={() => openCategoryPicker()}
+                          className={`flex items-center gap-2 pl-4 pr-3 py-2.5 rounded-xl border text-sm font-semibold transition-all duration-200 min-w-[160px] justify-between
+                            ${globalCategory
+                              ? "bg-teal-500/10 border-teal-500/40 text-teal-600 dark:text-teal-400 hover:bg-teal-500/20"
+                              : "bg-input border-border text-muted hover:border-primary hover:text-main"
+                            }`}
                         >
-                          <option value="" className="bg-white text-[#2D3436]">
-                            Select Category *
-                          </option>
+                          <span className="truncate">{globalCategory || "Select Category *"}</span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${categoryPickerOpen ? "rotate-180" : ""}`} />
+                        </button>
 
-                          {GLOBAL_CATEGORIES.map((c) => (
-                            <option
-                              key={c}
-                              value={c}
-                              className="bg-white text-[#2D3436]"
-                            >
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-white/80 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        {/* Floating pill panel */}
+                        {categoryPickerOpen && (
+                          <div className={`absolute left-0 z-50 w-64 animate-in fade-in zoom-in-95 duration-200 ${
+                            categoryPickerPos === "top"
+                              ? "bottom-full mb-2 slide-in-from-bottom-2"
+                              : "top-full mt-2 slide-in-from-top-2"
+                          }`}>
+                            <div className="bg-card/95 dark:bg-slate-900/95 backdrop-blur-xl border border-border dark:border-teal-500/20 rounded-2xl shadow-[0_20px_40px_-8px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_40px_-8px_rgba(13,148,136,0.2)] p-4">
+                              <p className="text-[10px] font-black text-muted uppercase tracking-widest mb-3">Select Category</p>
+                              <div className="flex flex-wrap gap-2">
+                                {GLOBAL_CATEGORIES.map((c) => (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => { setGlobalCategory(c); setCategoryPickerOpen(false); }}
+                                    className={`px-3.5 py-1.5 text-xs rounded-xl font-bold transition-all duration-200 ${
+                                      globalCategory === c
+                                        ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md shadow-teal-500/25 scale-[1.03]"
+                                        : "bg-canvas-alt dark:bg-teal-900/30 text-main dark:text-teal-100 hover:bg-teal-500/15 border border-border dark:border-teal-500/30 hover:border-teal-500/50"
+                                    }`}
+                                  >
+                                    {c}
+                                  </button>
+                                ))}
+                              </div>
+                              {globalCategory && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setGlobalCategory(""); setCategoryPickerOpen(false); }}
+                                  className="mt-3 w-full text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors bg-red-400/10 hover:bg-red-400/20 px-3 py-1.5 rounded-lg"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <span
                         className={`text-sm ${
@@ -1742,28 +1886,75 @@ const latestPostsByCourse = Object.values(
                     </h2>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <select
-                        value={globalCategoryFilter}
-                        onChange={(e) =>
-                          setGlobalCategoryFilter(e.target.value)
-                        }
-                        className="appearance-none pl-3 pr-8 py-1.5 bg-card border border-border rounded-lg text-sm text-muted focus:outline-none cursor-pointer"
+                    {/* ── Category filter picker ── */}
+                    <div className="relative" ref={filterPickerRef}>
+                      {/* Trigger button */}
+                      <button
+                        type="button"
+                        onClick={() => openFilterPicker()}
+                        className={`flex items-center gap-2 pl-3 pr-2.5 py-1.5 rounded-xl border text-sm font-semibold transition-all duration-200
+                          ${globalCategoryFilter !== "All Categories"
+                            ? "bg-teal-500/10 border-teal-500/40 text-teal-600 dark:text-teal-400 hover:bg-teal-500/20"
+                            : "bg-input border-border text-muted hover:border-primary hover:text-main"
+                          }`}
                       >
-                        <option>{t("discussions.all_categories")}</option>
-                        {GLOBAL_CATEGORIES.map((c) => (
-                          <option key={c} value={c}>
-                            {getCategoryLabel(c)}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <span className="max-w-[120px] truncate text-xs">
+                          {globalCategoryFilter === "All Categories"
+                            ? t("discussions.all_categories")
+                            : getCategoryLabel(globalCategoryFilter)}
+                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${filterPickerOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {/* Floating pill panel */}
+                      {filterPickerOpen && (
+                        <div className={`absolute right-0 z-50 w-56 animate-in fade-in zoom-in-95 duration-200 ${
+                          filterPickerPos === "top"
+                            ? "bottom-full mb-2 slide-in-from-bottom-2"
+                            : "top-full mt-2 slide-in-from-top-2"
+                        }`}>
+                          <div className="bg-card/95 dark:bg-slate-900/95 backdrop-blur-xl border border-border dark:border-teal-500/20 rounded-2xl shadow-[0_20px_40px_-8px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_40px_-8px_rgba(13,148,136,0.2)] p-4">
+                            <p className="text-[10px] font-black text-muted uppercase tracking-widest mb-3">Filter by Category</p>
+                            <div className="flex flex-wrap gap-2">
+                              {/* All option */}
+                              <button
+                                type="button"
+                                onClick={() => { setGlobalCategoryFilter("All Categories"); setGlobalPage(1); setFilterPickerOpen(false); }}
+                                className={`px-3.5 py-1.5 text-xs rounded-xl font-bold transition-all duration-200 ${
+                                  globalCategoryFilter === "All Categories"
+                                    ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md shadow-teal-500/25 scale-[1.03]"
+                                    : "bg-canvas-alt dark:bg-teal-900/30 text-main dark:text-teal-100 hover:bg-teal-500/15 border border-border dark:border-teal-500/30 hover:border-teal-500/50"
+                                }`}
+                              >
+                                {t("discussions.all_categories")}
+                              </button>
+                              {GLOBAL_CATEGORIES.map((c) => (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => { setGlobalCategoryFilter(c); setGlobalPage(1); setFilterPickerOpen(false); }}
+                                  className={`px-3.5 py-1.5 text-xs rounded-xl font-bold transition-all duration-200 ${
+                                    globalCategoryFilter === c
+                                      ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md shadow-teal-500/25 scale-[1.03]"
+                                      : "bg-canvas-alt dark:bg-teal-900/30 text-main dark:text-teal-100 hover:bg-teal-500/15 border border-border dark:border-teal-500/30 hover:border-teal-500/50"
+                                  }`}
+                                >
+                                  {getCategoryLabel(c)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <TrendingUp className="w-4 h-4 text-muted" />
                     {["Recent", "Popular"].map((s) => (
                       <button
                         key={s}
-                        onClick={() => setGlobalSort(s)}
+                        onClick={() => {
+                          setGlobalSort(s);
+                          setGlobalPage(1);
+                        }}
                         className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${
                           globalSort === s
                             ? "bg-red-500 text-white"
@@ -2220,7 +2411,31 @@ const latestPostsByCourse = Object.values(
                     ))}
                   </div>
                 )}
+
+                {/* Global posts pagination controls */}
+                {!globalLoading && globalPosts.length > 0 && (
+                  <div className="flex items-center justify-center gap-3 py-6 mt-6">
+                    <button
+                      disabled={globalPage === 1 || globalLoading}
+                      onClick={() => setGlobalPage(globalPage - 1)}
+                      className="px-4 py-2 text-sm font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-sm font-semibold text-muted">
+                      Page {globalPage} of {globalTotalPages}
+                    </span>
+                    <button
+                      disabled={globalPage === globalTotalPages || globalLoading}
+                      onClick={() => setGlobalPage(globalPage + 1)}
+                      className="px-4 py-2 text-sm font-medium rounded-lg border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-canvas transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
+              <FloatingAssistant />
             </main>
           )}
         </div>
