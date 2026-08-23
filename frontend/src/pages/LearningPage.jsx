@@ -373,7 +373,7 @@ export default function Learning() {
 
   let finalVideoUrl = null;
   let finalTranscriptName = data?.transcriptName || null;
-  let attempts = 0;
+  attempts = 0;
 
   while (attempts < 120) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -426,7 +426,7 @@ export default function Learning() {
     aiVideoUrl: finalVideoUrl,
     celebrity: selectedCelebrity,
   });
-
+}
 } catch (error) {
   console.error("AI video error:", error);
   setGeneratedTextContent("");
